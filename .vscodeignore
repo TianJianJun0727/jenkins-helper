@@ -1,0 +1,32 @@
+.vscode/**
+.vscode-test/**
+out/**
+node_modules/**
+src/**
+.gitignore
+.yarnrc
+esbuild.js
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/eslint.config.mjs
+**/*.map
+**/*.ts
+**/.vscode-test.*
+# webview-ui 源码和构建工具
+webview-ui/src/**
+webview-ui/node_modules/**
+webview-ui/.gitignore
+webview-ui/.prettierignore
+webview-ui/.prettierrc
+webview-ui/biome.json
+webview-ui/eslint.config.mjs
+webview-ui/package.json
+webview-ui/pnpm-lock.yaml
+webview-ui/tsconfig.json
+webview-ui/rsbuild.config.ts
+webview-ui/AGENTS.md
+webview-ui/README.md
+webview-ui/index.html
+webview-ui/public/**
+webview-ui/static/**
+# 只保留 webview-ui/dist 目录
