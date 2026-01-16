@@ -2,13 +2,13 @@
   "name": "jenkins-helper",
   "displayName": "Jenkins Helper",
   "description": "快捷触发 Jenkins 构建",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "TianJianJun0727",
   "license": "MIT",
   "repository": "https://github.com/TianJianJun0727/jenkins-helper.git",
   "icon": "images/icon.png",
   "engines": {
-    "vscode": "^1.105.1"
+    "vscode": "^1.100.0"
   },
   "categories": [
     "Other"
@@ -64,7 +64,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/vscode": "1.105.0",
+    "@types/vscode": "1.100.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.27.1",
