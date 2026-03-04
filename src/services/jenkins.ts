@@ -11,37 +11,55 @@ import {
   BuildExecutable,
   BuildResult,
   JenkinsBuildResponse,
-} from '../types/jenkins';
-import { LabeledValue, TriggerBuildPayload } from '../types';
-import { getCurrentConfig } from './config';
-import { POLLING } from '../constants';
-import { extractJobPath, ensureTrailingSlash } from '../utils/url';
-import * as JenkinsAPI from './jenkins-api';
+} from "../types/jenkins";
+import { LabeledValue, TriggerBuildPayload } from "../types";
+import { getCurrentConfig } from "./config";
+import { POLLING } from "../constants";
+import { extractJobPath, ensureTrailingSlash } from "../utils/url";
+import * as JenkinsAPI from "./jenkins-api";
 
 /**
  * Get environment options for a project
  * Fetches Jenkins job tree and filters by project name
+ * First tries exact match, falls back to includes match for monorepo support
  */
 export async function getEnvOptions(
   projectName: string,
-  baseUrl: string
+  baseUrl: string,
 ): Promise<LabeledValue[]> {
   const [error, data] = await JenkinsAPI.fetchJobsTree(baseUrl);
 
   if (error || !data) {
-    console.error('Failed to fetch jobs tree:', error);
+    console.error("Failed to fetch jobs tree:", error);
     return [];
   }
 
   const jobs = data.jobs ?? [];
   const target = projectName.toLowerCase();
 
-  return jobs.flatMap((top: JenkinsJob) => {
+  // First try exact match
+  const exactMatches = jobs.flatMap((top: JenkinsJob) => {
     const children = top.jobs ?? [];
     return children
       .filter((child: JenkinsJob) => child.name.toLowerCase() === target)
       .map((child: JenkinsJob) => ({
         label: top.name,
+        value: child.url,
+      }));
+  });
+
+  // If exact match found, return it
+  if (exactMatches.length > 0) {
+    return exactMatches;
+  }
+
+  // Otherwise, try includes match (for monorepo projects)
+  return jobs.flatMap((top: JenkinsJob) => {
+    const children = top.jobs ?? [];
+    return children
+      .filter((child: JenkinsJob) => child.name.toLowerCase().includes(target))
+      .map((child: JenkinsJob) => ({
+        label: `${top.name}(${child.name})`,
         value: child.url,
       }));
   });
@@ -51,7 +69,7 @@ export async function getEnvOptions(
  * Trigger build with parameters and get queue location
  */
 async function triggerBuild(
-  payload: TriggerBuildPayload
+  payload: TriggerBuildPayload,
 ): Promise<string | undefined> {
   const { jobUrl, branch } = payload;
 
@@ -60,11 +78,11 @@ async function triggerBuild(
   });
 
   if (error || res?.status !== 201) {
-    console.error('Failed to trigger build:', error);
+    console.error("Failed to trigger build:", error);
     return undefined;
   }
 
-  const location = res.headers['location'] || res.headers['Location'];
+  const location = res.headers["location"] || res.headers["Location"];
   return location || undefined;
 }
 
@@ -73,7 +91,7 @@ async function triggerBuild(
  * Polls the queue until executable is available
  */
 async function waitForExecutable(
-  queueUrl: string
+  queueUrl: string,
 ): Promise<BuildExecutable | undefined> {
   const { QUEUE_MAX_ATTEMPTS, QUEUE_INTERVAL } = POLLING;
   let attempts = 0;
@@ -106,7 +124,7 @@ async function pollBuildStatus(
   buildNumber: number,
   jobPath: string,
   jenkinsBaseUrl: string,
-  onProgress: (progress: JenkinsBlueOceanNode[]) => void
+  onProgress: (progress: JenkinsBlueOceanNode[]) => void,
 ): Promise<boolean> {
   const { BUILD_MAX_ATTEMPTS, BUILD_INTERVAL } = POLLING;
   let attempts = 0;
@@ -115,7 +133,7 @@ async function pollBuildStatus(
     const [error, data] = await JenkinsAPI.fetchBlueOceanNodes(
       jenkinsBaseUrl,
       jobPath,
-      buildNumber
+      buildNumber,
     );
 
     if (!error && data && Array.isArray(data)) {
@@ -124,10 +142,10 @@ async function pollBuildStatus(
       // Check if any stage has failed - if so, stop immediately
       const hasFailed = data.some(
         (node) =>
-          node.state === 'FINISHED' &&
-          (node.result === 'FAILURE' ||
-            node.result === 'ABORTED' ||
-            node.result === 'UNSTABLE')
+          node.state === "FINISHED" &&
+          (node.result === "FAILURE" ||
+            node.result === "ABORTED" ||
+            node.result === "UNSTABLE"),
       );
 
       if (hasFailed) {
@@ -135,7 +153,7 @@ async function pollBuildStatus(
       }
 
       // Check if all stages are finished
-      const allFinished = data.every((node) => node.state === 'FINISHED');
+      const allFinished = data.every((node) => node.state === "FINISHED");
       if (allFinished) {
         return true;
       }
@@ -153,13 +171,13 @@ async function pollBuildStatus(
  */
 async function getBuildResult(
   jobUrl: string,
-  buildNumber: number
+  buildNumber: number,
 ): Promise<JenkinsBuildResponse | undefined> {
   const buildUrl = `${ensureTrailingSlash(jobUrl)}${buildNumber}/`;
   const [error, data] = await JenkinsAPI.fetchBuild(buildUrl);
 
   if (error || !data) {
-    console.error('Failed to get build result:', error);
+    console.error("Failed to get build result:", error);
     return undefined;
   }
 
@@ -169,9 +187,10 @@ async function getBuildResult(
 /**
  * Extract builder and branch information from build data
  */
-function extractBuilderAndBranch(
-  data: JenkinsBuildResponse
-): { builder: string | null; branch: string | null } {
+function extractBuilderAndBranch(data: JenkinsBuildResponse): {
+  builder: string | null;
+  branch: string | null;
+} {
   let builder: string | null = null;
   let branch: string | null = null;
 
@@ -179,12 +198,12 @@ function extractBuilderAndBranch(
 
   // Extract builder from CauseAction
   const causeAction = actions.find(
-    (action) => action?._class === 'hudson.model.CauseAction'
+    (action) => action?._class === "hudson.model.CauseAction",
   );
 
   if (causeAction && Array.isArray(causeAction.causes)) {
     const userIdCause = causeAction.causes.find(
-      (cause) => cause._class === 'hudson.model.Cause$UserIdCause'
+      (cause) => cause._class === "hudson.model.Cause$UserIdCause",
     );
     if (userIdCause) {
       builder = userIdCause.userName || userIdCause.userId || null;
@@ -193,12 +212,12 @@ function extractBuilderAndBranch(
 
   // Extract branch from ParametersAction
   const parametersAction = actions.find(
-    (action) => action?._class === 'hudson.model.ParametersAction'
+    (action) => action?._class === "hudson.model.ParametersAction",
   );
 
   if (parametersAction && Array.isArray(parametersAction.parameters)) {
     const gitBranchParam = parametersAction.parameters.find(
-      (param) => param.name === 'GIT_BRANCH'
+      (param) => param.name === "GIT_BRANCH",
     );
     if (gitBranchParam) {
       branch = String(gitBranchParam.value || null);
@@ -215,44 +234,44 @@ function extractBuilderAndBranch(
 export async function triggerBuildWithLifecycle(
   payload: TriggerBuildPayload,
   onProgress: (progress: JenkinsBlueOceanNode[]) => void,
-  onResult: (result: BuildResult) => void | Promise<void>
+  onResult: (result: BuildResult) => void | Promise<void>,
 ): Promise<void> {
   try {
     const config = getCurrentConfig();
     const { jobUrl } = payload;
 
-    console.log('Triggering build with payload:', payload);
+    console.log("Triggering build with payload:", payload);
 
     // Step 1: Trigger build and get queue location
     const queueLocation = await triggerBuild(payload);
     if (!queueLocation) {
       await onResult({
-        stage: 'finished',
+        stage: "finished",
         success: false,
-        message: '触发构建失败: 无法获取队列位置',
+        message: "触发构建失败: 无法获取队列位置",
       });
       return;
     }
 
     await onResult({
-      stage: 'queued',
-      message: '等待构建分配执行器...',
+      stage: "queued",
+      message: "等待构建分配执行器...",
     });
 
     // Step 2: Wait for queue to assign build number
     const executable = await waitForExecutable(queueLocation);
     if (!executable) {
       await onResult({
-        stage: 'finished',
+        stage: "finished",
         success: false,
-        message: '触发构建失败: 无法获取构建信息',
+        message: "触发构建失败: 无法获取构建信息",
       });
       return;
     }
 
     await onResult({
-      stage: 'building',
-      message: '构建中...',
+      stage: "building",
+      message: "构建中...",
       buildNumber: executable.number,
       buildUrl: executable.url,
     });
@@ -265,14 +284,14 @@ export async function triggerBuildWithLifecycle(
       executable.number,
       jobPath,
       config.url,
-      onProgress
+      onProgress,
     );
 
     if (!isFinished) {
       await onResult({
-        stage: 'finished',
+        stage: "finished",
         success: false,
-        message: '构建超时: 构建未在预期时间内完成',
+        message: "构建超时: 构建未在预期时间内完成",
         buildNumber: executable.number,
         buildUrl: executable.url,
       });
@@ -283,9 +302,9 @@ export async function triggerBuildWithLifecycle(
     const buildData = await getBuildResult(jobUrl, executable.number);
     if (!buildData) {
       await onResult({
-        stage: 'finished',
+        stage: "finished",
         success: false,
-        message: '构建失败: 无法获取构建结果',
+        message: "构建失败: 无法获取构建结果",
         buildNumber: executable.number,
         buildUrl: executable.url,
       });
@@ -293,13 +312,13 @@ export async function triggerBuildWithLifecycle(
     }
 
     // Step 6: Send final result
-    const isSuccess = buildData.result === 'SUCCESS';
+    const isSuccess = buildData.result === "SUCCESS";
     const builderInfo = extractBuilderAndBranch(buildData);
 
     await onResult({
-      stage: 'finished',
+      stage: "finished",
       success: isSuccess,
-      message: isSuccess ? '构建成功' : `构建失败: ${buildData.result}`,
+      message: isSuccess ? "构建成功" : `构建失败: ${buildData.result}`,
       buildNumber: executable.number,
       buildUrl: buildData.url,
       result: buildData.result || undefined,
@@ -307,9 +326,9 @@ export async function triggerBuildWithLifecycle(
       ...builderInfo,
     });
   } catch (error) {
-    console.error('Build lifecycle error:', error);
+    console.error("Build lifecycle error:", error);
     await onResult({
-      stage: 'finished',
+      stage: "finished",
       success: false,
       message: `构建异常: ${String(error)}`,
     });
@@ -319,9 +338,7 @@ export async function triggerBuildWithLifecycle(
 /**
  * Get last build result for a job
  */
-export async function getLastBuildResult(
-  jobUrl: string
-): Promise<{
+export async function getLastBuildResult(jobUrl: string): Promise<{
   builder: string | null;
   branch: string | null;
   timestamp?: number;
@@ -332,7 +349,7 @@ export async function getLastBuildResult(
   const [error, data] = await JenkinsAPI.fetchLastBuild(jobUrl);
 
   if (error || !data) {
-    console.error('Failed to get last build result:', error);
+    console.error("Failed to get last build result:", error);
     return { builder: null, branch: null };
   }
 
@@ -351,10 +368,10 @@ export async function getLastBuildResult(
  */
 export async function sendWebhook(
   webhookUrl: string,
-  payload: BuildResult
+  payload: BuildResult,
 ): Promise<void> {
   const [error] = await JenkinsAPI.postWebhook(webhookUrl, payload);
   if (error) {
-    console.error('Failed to send webhook:', error);
+    console.error("Failed to send webhook:", error);
   }
 }

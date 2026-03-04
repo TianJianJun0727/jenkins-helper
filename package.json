@@ -2,7 +2,7 @@
   "name": "jenkins-helper",
   "displayName": "Jenkins Helper",
   "description": "快捷触发 Jenkins 构建",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "TianJianJun0727",
   "license": "MIT",
   "repository": "https://github.com/TianJianJun0727/jenkins-helper.git",
@@ -19,7 +19,8 @@
     "commands": [
       {
         "command": "jenkins-helper.openPanel",
-        "title": "打开Jenkins 构建助手"
+        "title": "打开Jenkins 构建助手",
+        "icon": "images/icon.svg"
       }
     ],
     "menus": {
