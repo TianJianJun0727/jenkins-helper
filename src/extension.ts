@@ -63,7 +63,7 @@ async function sendBuildData(
   const cfg = getCurrentConfig();
 
   try {
-    const [branchInfo, envOptions] = await Promise.all([
+    const [branchInfo, buildOptions] = await Promise.all([
       getBranchInfo(workspaceRoot),
       getEnvOptions(projectName, cfg.url),
     ]);
@@ -72,7 +72,8 @@ async function sendBuildData(
       type: MessageType.UPDATE_DATA,
       currentBranch: branchInfo.currentBranch,
       branchOptions: branchInfo.branchOptions,
-      envOptions: envOptions ?? [],
+      envOptions: buildOptions.envOptions,
+      projectOptions: buildOptions.projectOptions,
       defaultEnv: cfg.defaultEnv,
     });
   } catch (error) {
@@ -283,6 +284,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         projectName,
         branches: [],
         envOptions: [],
+        projectOptions: [],
         currentBranch: undefined,
         activePage: shouldOpenConfigFirst ? 'config' : 'build',
       });

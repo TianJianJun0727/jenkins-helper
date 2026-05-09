@@ -12,7 +12,12 @@ import {
   BuildResult,
   JenkinsBuildResponse,
 } from "../types/jenkins";
-import { LabeledValue, TriggerBuildPayload } from "../types";
+import {
+  BuildOptions,
+  BuildProjectOption,
+  LabeledValue,
+  TriggerBuildPayload,
+} from "../types";
 import { getCurrentConfig } from "./config";
 import { POLLING } from "../constants";
 import { extractJobPath, ensureTrailingSlash } from "../utils/url";
@@ -21,48 +26,60 @@ import * as JenkinsAPI from "./jenkins-api";
 /**
  * Get environment options for a project
  * Fetches Jenkins job tree and filters by project name
- * First tries exact match, falls back to includes match for monorepo support
+ * Matches project names by case-insensitive exact equality.
+ * If no exact match exists, returns all projects for manual selection.
  */
 export async function getEnvOptions(
   projectName: string,
   baseUrl: string,
-): Promise<LabeledValue[]> {
+): Promise<BuildOptions> {
   const [error, data] = await JenkinsAPI.fetchJobsTree(baseUrl);
 
   if (error || !data) {
     console.error("Failed to fetch jobs tree:", error);
-    return [];
+    return { envOptions: [], projectOptions: [] };
   }
 
   const jobs = data.jobs ?? [];
   const target = projectName.toLowerCase();
+  const projectMap = new Map<string, BuildProjectOption>();
+  const envOptions: LabeledValue[] = [];
 
-  // First try exact match
-  const exactMatches = jobs.flatMap((top: JenkinsJob) => {
+  jobs.forEach((top: JenkinsJob) => {
     const children = top.jobs ?? [];
-    return children
-      .filter((child: JenkinsJob) => child.name.toLowerCase() === target)
-      .map((child: JenkinsJob) => ({
+    children.forEach((child: JenkinsJob) => {
+      const envOption = {
         label: top.name,
         value: child.url,
-      }));
+      };
+      const projectKey = child.name.toLowerCase();
+      const projectOption = projectMap.get(projectKey);
+
+      if (projectOption) {
+        projectOption.envOptions.push(envOption);
+      } else {
+        projectMap.set(projectKey, {
+          label: child.name,
+          value: child.name,
+          envOptions: [envOption],
+        });
+      }
+
+      if (projectKey === target) {
+        envOptions.push(envOption);
+      }
+    });
   });
 
-  // If exact match found, return it
-  if (exactMatches.length > 0) {
-    return exactMatches;
+  if (envOptions.length > 0) {
+    return { envOptions, projectOptions: [] };
   }
 
-  // Otherwise, try includes match (for monorepo projects)
-  return jobs.flatMap((top: JenkinsJob) => {
-    const children = top.jobs ?? [];
-    return children
-      .filter((child: JenkinsJob) => child.name.toLowerCase().includes(target))
-      .map((child: JenkinsJob) => ({
-        label: `${top.name}(${child.name})`,
-        value: child.url,
-      }));
-  });
+  const projectOptions = Array.from(projectMap.values()).sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
+
+  return { envOptions: [], projectOptions };
 }
 
 /**

@@ -1,9 +1,19 @@
 import type { DescriptionsProps } from 'antd';
-import { Button, Descriptions, Divider, Form, Select, Space, Tag, Typography } from 'antd';
+import {
+  Button,
+  Descriptions,
+  Divider,
+  Form,
+  Select,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import { useEffect, useState, useCallback } from 'react';
 
 const { Link: AntLink } = Typography;
 import type {
+  BuildProjectOption,
   BuildResultMessage,
   LabeledValue,
   LastBuildResultMessage,
@@ -15,6 +25,7 @@ import { MessageType } from '../../types';
 import { onMessage, postMessage } from '../../utils/vscode';
 
 export type BuildFormType = {
+  project?: string;
   env: string;
   branch: string;
 };
@@ -25,14 +36,28 @@ interface BuildFormProps {
 }
 
 const defaultValues: BuildFormType = {
+  project: undefined,
   env: '',
   branch: '',
 };
 
+const defaultLastBuildInfo = {
+  user: '--',
+  branch: '--',
+  time: '--',
+  buildNumber: '--',
+  buildUrl: '',
+  result: '--',
+};
+
 const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
   const [form] = Form.useForm<BuildFormType>();
+  const [projectOptions, setProjectOptions] = useState<BuildProjectOption[]>(
+    [],
+  );
   const [envOptions, setEnvOptions] = useState<LabeledValue[]>([]);
   const [branchOptions, setBranchOptions] = useState<LabeledValue[]>([]);
+  const [defaultEnv, setDefaultEnv] = useState<string>();
   const [isBuilding, setIsBuilding] = useState(false);
   const [lastBuildInfo, setLastBuildInfo] = useState<{
     user: string;
@@ -41,28 +66,34 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
     buildNumber: string;
     buildUrl: string;
     result: string;
-  }>({
-    user: '--',
-    branch: '--',
-    time: '--',
-    buildNumber: '--',
-    buildUrl: '',
-    result: '--',
-  });
+  }>(defaultLastBuildInfo);
 
-  // 格式化耗时显示（保留用于其他地方）
-  const formatDuration = useCallback((ms: number | undefined) => {
-    if (!ms || ms === 0) return '--';
+  const selectEnv = useCallback(
+    (options: LabeledValue[], nextDefaultEnv?: string) => {
+      if (options.length === 0) {
+        form.setFieldValue('env', '');
+        return;
+      }
 
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
+      let selectedEnv = options[0].value;
 
-    if (minutes > 0) {
-      return `${minutes}分${remainingSeconds}秒`;
-    }
-    return `${seconds}秒`;
-  }, []);
+      if (nextDefaultEnv) {
+        const defaultOption = options.find(
+          (opt) => opt.label === nextDefaultEnv,
+        );
+        if (defaultOption) {
+          selectedEnv = defaultOption.value;
+        }
+      }
+
+      form.setFieldValue('env', selectedEnv);
+      postMessage({
+        type: MessageType.GET_LAST_BUILD_RESULT,
+        payload: { jobUrl: selectedEnv },
+      });
+    },
+    [form],
+  );
 
   useEffect(() => {
     // 请求构建数据
@@ -77,30 +108,21 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
     >((msg) => {
       switch (msg?.type) {
         case MessageType.UPDATE_DATA:
-          // 更新环境选项
-          if (msg.envOptions) {
+          setDefaultEnv(msg.defaultEnv);
+          setProjectOptions(msg.projectOptions ?? []);
+
+          // 更新环境选项。未精确命中项目时，等待用户先选择构建项目。
+          if ((msg.projectOptions ?? []).length > 0) {
+            const firstProject = msg.projectOptions[0];
+            const nextEnvOptions = firstProject.envOptions ?? [];
+
+            setEnvOptions(nextEnvOptions);
+            setLastBuildInfo(defaultLastBuildInfo);
+            form.setFieldValue('project', firstProject.value);
+            selectEnv(nextEnvOptions, msg.defaultEnv);
+          } else if (msg.envOptions) {
             setEnvOptions(msg.envOptions);
-            if (msg.envOptions.length > 0) {
-              // 尝试使用默认环境，如果不存在则使用第一个
-              let selectedEnv = msg.envOptions[0].value;
-
-              if (msg.defaultEnv) {
-                // 查找匹配的默认环境（按 label 匹配）
-                const defaultOption = msg.envOptions.find(
-                  (opt) => opt.label === msg.defaultEnv
-                );
-                if (defaultOption) {
-                  selectedEnv = defaultOption.value;
-                }
-              }
-
-              form.setFieldValue('env', selectedEnv);
-              // 首次加载时获取上次构建信息
-              postMessage({
-                type: MessageType.GET_LAST_BUILD_RESULT,
-                payload: { jobUrl: selectedEnv },
-              });
-            }
+            selectEnv(msg.envOptions, msg.defaultEnv);
           }
           // 更新分支选项
           if (msg.branchOptions) {
@@ -183,7 +205,7 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
     return () => {
       unsubscribe();
     };
-  }, [form, formatDuration]);
+  }, [form, selectEnv]);
 
   // 一键构建
   const handleFinish = (values: BuildFormType) => {
@@ -252,6 +274,15 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
       type: MessageType.GET_LAST_BUILD_RESULT,
       payload: { jobUrl: value },
     });
+  };
+
+  const handleProjectChange = (value: string) => {
+    const selectedProject = projectOptions.find((item) => item.value === value);
+    const nextEnvOptions = selectedProject?.envOptions ?? [];
+
+    setEnvOptions(nextEnvOptions);
+    setLastBuildInfo(defaultLastBuildInfo);
+    selectEnv(nextEnvOptions, defaultEnv);
   };
 
   const infoItems: DescriptionsProps['items'] = [
@@ -359,6 +390,21 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
         onFinish={handleFinish}
         initialValues={defaultValues}
       >
+        {projectOptions.length > 0 && (
+          <Form.Item
+            label="构建项目"
+            name="project"
+            rules={[{ required: true, message: '请选择构建项目' }]}
+            style={{ marginBottom: '12px' }}
+          >
+            <Select
+              placeholder="请选择构建项目"
+              showSearch
+              options={projectOptions}
+              onChange={handleProjectChange}
+            />
+          </Form.Item>
+        )}
         <Form.Item
           label="构建环境"
           name="env"
@@ -373,13 +419,13 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
           />
         </Form.Item>
         <Form.Item
-          label="部署分支"
+          label="构建分支"
           name="branch"
-          rules={[{ required: true, message: '请选择部署分支' }]}
+          rules={[{ required: true, message: '请选择构建分支' }]}
           style={{ marginBottom: '16px' }}
         >
           <Select
-            placeholder="请选择部署分支"
+            placeholder="请选择构建分支"
             showSearch
             options={branchOptions}
           />

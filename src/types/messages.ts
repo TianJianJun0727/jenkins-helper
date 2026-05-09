@@ -57,6 +57,21 @@ export interface LabeledValue {
 }
 
 /**
+ * Build project option with its available environments
+ */
+export interface BuildProjectOption extends LabeledValue {
+  envOptions: LabeledValue[];
+}
+
+/**
+ * Build options resolved from Jenkins jobs
+ */
+export interface BuildOptions {
+  envOptions: LabeledValue[];
+  projectOptions: BuildProjectOption[];
+}
+
+/**
  * Build trigger payload
  */
 export interface TriggerBuildPayload {
@@ -101,6 +116,7 @@ export interface InitDataMessage extends BaseMessage {
   projectName: string;
   branches: LabeledValue[];
   envOptions: LabeledValue[];
+  projectOptions?: BuildProjectOption[];
   currentBranch?: string;
   activePage: 'build' | 'config';
 }
@@ -146,6 +162,7 @@ export interface UpdateDataMessage extends BaseMessage {
   currentBranch?: string;
   branchOptions: LabeledValue[];
   envOptions: LabeledValue[];
+  projectOptions: BuildProjectOption[];
   defaultEnv?: string; // 默认构建环境
 }
 
