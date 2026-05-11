@@ -93,8 +93,7 @@ async function handleTriggerBuild(
   payload: TriggerBuildPayload,
   projectName: string
 ): Promise<void> {
-
-
+  const effectiveProjectName = payload.projectName || projectName;
   const cfg = getCurrentConfig();
 
   // Send progress updates to webview
@@ -112,6 +111,7 @@ async function handleTriggerBuild(
     panel.postMessage({
       type: MessageType.BUILD_RESULT,
       ...result,
+      projectName: effectiveProjectName,
     });
   };
 
@@ -134,7 +134,11 @@ async function handleTriggerBuild(
 
         // Send webhook if configured
         if (cfg.webhook) {
-          sendWebhook(cfg.webhook, {...result,...payload,projectName});
+          sendWebhook(cfg.webhook, {
+            ...result,
+            ...payload,
+            projectName: effectiveProjectName,
+          });
         }
 
         // Refresh last build info after build completes
@@ -148,7 +152,13 @@ async function handleTriggerBuild(
   } catch (error) {
     console.error('构建失败:', error);
     const msg = `${ERROR_MESSAGES.TRIGGER_BUILD_FAILED}: ${String(error)}`;
-    postResult({ stage: 'finished', success: false, message: msg,...payload,projectName });
+    postResult({
+      stage: 'finished',
+      success: false,
+      message: msg,
+      ...payload,
+      projectName: effectiveProjectName,
+    });
     vscode.window.showErrorMessage(msg);
   }
 }

@@ -75,6 +75,7 @@ export interface BuildOptions {
  * Build trigger payload
  */
 export interface TriggerBuildPayload {
+  projectName?: string;
   env: string;
   jobUrl: string;
   branch: string;

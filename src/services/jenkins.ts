@@ -27,7 +27,7 @@ import * as JenkinsAPI from "./jenkins-api";
  * Get environment options for a project
  * Fetches Jenkins job tree and filters by project name
  * Matches project names by case-insensitive exact equality.
- * If no exact match exists, returns all projects for manual selection.
+ * Always returns the project list for manual selection.
  */
 export async function getEnvOptions(
   projectName: string,
@@ -71,15 +71,11 @@ export async function getEnvOptions(
     });
   });
 
-  if (envOptions.length > 0) {
-    return { envOptions, projectOptions: [] };
-  }
-
   const projectOptions = Array.from(projectMap.values()).sort((a, b) =>
     a.label.localeCompare(b.label),
   );
 
-  return { envOptions: [], projectOptions };
+  return { envOptions, projectOptions };
 }
 
 /**

@@ -58,6 +58,7 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
   const [envOptions, setEnvOptions] = useState<LabeledValue[]>([]);
   const [branchOptions, setBranchOptions] = useState<LabeledValue[]>([]);
   const [defaultEnv, setDefaultEnv] = useState<string>();
+  const [selectedProjectName, setSelectedProjectName] = useState<string>();
   const [isBuilding, setIsBuilding] = useState(false);
   const [lastBuildInfo, setLastBuildInfo] = useState<{
     user: string;
@@ -111,18 +112,27 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
           setDefaultEnv(msg.defaultEnv);
           setProjectOptions(msg.projectOptions ?? []);
 
-          // 更新环境选项。未精确命中项目时，等待用户先选择构建项目。
-          if ((msg.projectOptions ?? []).length > 0) {
-            const firstProject = msg.projectOptions[0];
-            const nextEnvOptions = firstProject.envOptions ?? [];
+          const currentProjectName = projectName?.toLowerCase() ?? '';
+          const matchedProject = (msg.projectOptions ?? []).find(
+            (item) =>
+              item.value.toLowerCase() === currentProjectName ||
+              item.label.toLowerCase() === currentProjectName,
+          );
+
+          setLastBuildInfo(defaultLastBuildInfo);
+
+          if (matchedProject) {
+            const nextEnvOptions = matchedProject.envOptions ?? [];
 
             setEnvOptions(nextEnvOptions);
-            setLastBuildInfo(defaultLastBuildInfo);
-            form.setFieldValue('project', firstProject.value);
+            form.setFieldValue('project', matchedProject.value);
+            setSelectedProjectName(matchedProject.label);
             selectEnv(nextEnvOptions, msg.defaultEnv);
-          } else if (msg.envOptions) {
-            setEnvOptions(msg.envOptions);
-            selectEnv(msg.envOptions, msg.defaultEnv);
+          } else {
+            setEnvOptions([]);
+            form.setFieldValue('project', undefined);
+            setSelectedProjectName(undefined);
+            form.setFieldValue('env', '');
           }
           // 更新分支选项
           if (msg.branchOptions) {
@@ -205,18 +215,22 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
     return () => {
       unsubscribe();
     };
-  }, [form, selectEnv]);
+  }, [form, projectName, selectEnv]);
 
   // 一键构建
   const handleFinish = (values: BuildFormType) => {
     setIsBuilding(true);
 
-    const { env, branch } = values;
+    const { project, env, branch } = values;
     const currentEnv = envOptions.find((e) => e.value === env);
     const currentBranch = branchOptions.find((b) => b.value === branch);
+    const currentProject = projectOptions.find((p) => p.value === project);
+    const buildProjectName =
+      currentProject?.label ?? selectedProjectName ?? projectName;
 
     if (currentEnv && currentBranch) {
       const payload: TriggerBuildPayload = {
+        projectName: buildProjectName,
         env: currentEnv.label,
         jobUrl: currentEnv.value,
         branch: currentBranch.value,
@@ -282,15 +296,18 @@ const BuildForm = ({ projectName, currentBranch }: BuildFormProps) => {
 
     setEnvOptions(nextEnvOptions);
     setLastBuildInfo(defaultLastBuildInfo);
+    setSelectedProjectName(selectedProject?.label ?? value);
     selectEnv(nextEnvOptions, defaultEnv);
   };
+
+  const displayProjectName = selectedProjectName ?? projectName;
 
   const infoItems: DescriptionsProps['items'] = [
     {
       key: 'project',
       label: '当前项目',
-      children: projectName ? (
-        <Tag color="blue">{projectName}</Tag>
+      children: displayProjectName ? (
+        <Tag color="blue">{displayProjectName}</Tag>
       ) : (
         <span>--</span>
       ),

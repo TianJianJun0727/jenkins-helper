@@ -146,7 +146,8 @@ const BuildStatus = () => {
   const getBuildStatusAlert = () => {
     if (!buildResult) return null;
 
-    const { stage, success, message, buildNumber, buildUrl } = buildResult;
+    const { stage, success, message, buildNumber, buildUrl, projectName } =
+      buildResult;
 
     if (stage === 'queued') {
       return (
@@ -167,6 +168,9 @@ const BuildStatus = () => {
           description={
             <Space direction="vertical" style={{ width: '100%' }}>
               <Text>构建正在进行,请稍候...</Text>
+              {projectName && (
+                <Text type="secondary">项目名称: {projectName}</Text>
+              )}
               {buildNumber && (
                 <Text type="secondary">
                   构建编号: #
@@ -195,6 +199,9 @@ const BuildStatus = () => {
           message={success ? '构建成功' : '构建失败'}
           description={
             <Space direction="vertical" style={{ width: '100%' }}>
+              {projectName && (
+                <Text type="secondary">项目名称: {projectName}</Text>
+              )}
               <Text>{message}</Text>
               {buildNumber && (
                 <Text type="secondary">
